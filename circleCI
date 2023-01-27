@@ -1,0 +1,56 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/2.0/configuration-reference
+version: 2.1
+
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
+jobs:
+  run-scan:
+    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
+    docker:
+      - image: ubuntu:20.04
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
+    steps:
+      - checkout
+      - run:
+          name: Install NodeJS and nexploit-cli
+          environment:
+            DEBIAN_FRONTEND: 'noninteractive'
+          command: |
+            apt -y update
+            apt-get -y install libnode-dev node-gyp libssl-dev
+            apt-get -y install nodejs npm
+            npm install -g @neuralegion/nexploit-cli --unsafe-perm=true
+      - run:
+          name: Start Nexploit Scan 🏁
+          command: |
+            SCAN_ID=$(nexploit-cli scan:run                                                 \
+            --test csrf dom_xss xss header_security secret_tokens open_buckets                 \
+            --name "💎 BrokenCrystals for CircleCI" \
+            --crawler https://brokencrystals.com/  \
+            --token $NEXPLOIT_TOKEN)
+            printf "Scan id is: $SCAN_ID"
+            echo "export SCAN_ID=\"$SCAN_ID\"" >> $BASH_ENV
+            
+      - run:
+          name: Output scan URL
+          command: |
+            printf "Scan was started with ID https://nexploit.app/scans/${SCAN_ID}"
+      - run:
+          name: Wait for issues ⏳
+          command: |
+            nexploit-cli scan:polling               \
+            --interval 30s                        \
+            --timeout 10m                         \
+            --token $NEXPLOIT_TOKEN               \
+            --breakpoint high_issue ${SCAN_ID}
+          
+            
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
+workflows:
+  run-scan-workflow:
+    jobs:
+      - run-scan
